@@ -1,0 +1,5 @@
+*~
+*,cover
+.coverage
+__pycache__
+docs
