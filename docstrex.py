@@ -19,10 +19,10 @@ import tempfile  # Used for unit tests.
 from typing import Any, Callable, cast, Dict, IO, List, Tuple, Optional
 
 
-# PyDoc:
+# PyBase:
 @dataclass
-class PyDoc(object):
-    """PyDoc: Base class PyFunction, PyClass, and PyModule classes.
+class PyBase(object):
+    """PyBase: Base class PyFunction, PyClass, PyModule, and PyPackage classes.
 
     Attributes:
     * *Name* (str):
@@ -44,9 +44,9 @@ class PyDoc(object):
     Anchor: str = field(init=False, repr=False, default="")
     Number: str = field(init=False, repr=False, default="??")
 
-    # PyDoc.set_lines():
+    # PyBase.set_lines():
     def set_lines(self, doc_string: Optional[str]) -> None:
-        """Set the Lines field of a PyDoc.
+        """Set the Lines field of a PyBase.
 
         Arguments:
         * *doc_string* (Optional[str]):
@@ -54,7 +54,7 @@ class PyDoc(object):
 
         *doc_string* is split into lines.  Both the first line and all subsequent empty lines
         are ignored to determine the actual doc string indentation level.  The approproiate
-        lines have there indentation padding removed before being stored into PyDoc.Lines
+        lines have there indentation padding removed before being stored into PyBase.Lines
         attributes.
 
         """
@@ -96,9 +96,9 @@ class PyDoc(object):
 
             self.Lines = tuple(lines)
 
-    # PyDoc.set_annotations():
+    # PyBase.set_annotations():
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
-        """Set the PyDoc Anchor and Number attributes.
+        """Set the PyBase Anchor and Number attributes.
 
         Arguments:
         * *anchor_prefix* (str):
@@ -114,12 +114,12 @@ class PyDoc(object):
 
 # PyFunction:
 @dataclass
-class PyFunction(PyDoc):
+class PyFunction(PyBase):
     """PyFunction: Represents a function or method.
 
     Inherited Attributes:
     * *Name* (str)
-    * *Lines* (Tuple[str, ..)
+    * *Lines* (Tuple[str, ...])
     * *Anchor* (str)
     * *Number* (str)
 
@@ -146,7 +146,7 @@ class PyFunction(PyDoc):
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
         """Set the markdown annotations.
 
-        (see [ModeDoc.set_annoations](#Doc-PyDoc-set_annotations)
+        (see [ModeDoc.set_annoations](#Doc-PyBase-set_annotations)
 
         """
         self.Anchor = anchor_prefix + self.Name.lower().replace("_", "-")
@@ -194,12 +194,12 @@ class PyFunction(PyDoc):
 
 # PyClass:
 @dataclass
-class PyClass(PyDoc):
+class PyClass(PyBase):
     """PyClass: Represents a class method.
 
     Inherited Attributes:
     * *Name* (str): The attribute name.
-    * *Lines* ( , *Anchor*, *Number* from PyDoc.
+    * *Lines* ( , *Anchor*, *Number* from PyBase.
 
     Attributes:
     * *Class* (Any): The underlying Python class object that is imported.
@@ -274,7 +274,7 @@ class PyClass(PyDoc):
 
 # PyModule:
 @dataclass
-class PyModule(PyDoc):
+class PyModule(PyBase):
     """PyModule: Represents a module."""
 
     Module: Any = field(repr=False)
@@ -310,7 +310,7 @@ class PyModule(PyDoc):
         # The Python import statement can import class to the module namespace.
         # We are only interested in classes that are defined in *module*:
         py_classes: List[PyClass] = []
-        class_type: type = type(PyDoc)  # Any class name to get the associated class type.
+        class_type: type = type(PyBase)  # Any class name to get the associated class type.
         assert isinstance(class_type, type)
         attribute_name: str
         # print(f"{module=} {type(module)=}")
@@ -424,10 +424,10 @@ class PyModule(PyDoc):
             print(f"{tracing}<=PyModule.generate({markdown_path}, {markdown_program})")
 
 
-# PythonFile:
+# PyFile:
 @dataclass
-class PythonFile:
-    """PythonFile: A class that is one-to-one with a Python file.
+class PyFile:
+    """PyFile: A class that is one-to-one with a Python file.
 
     Attributes:
     * *py_path* (Path):
@@ -446,7 +446,7 @@ class PythonFile:
       True if `def main(` is present in file.  (Default is False.)
 
     Constructor:
-    * PythonFile(py_path, md_path, html_path, markdown_convert)
+    * PyFile(py_path, md_path, html_path, markdown_convert)
 
     """
 
@@ -457,9 +457,9 @@ class PythonFile:
     detects_main: bool = field(init=False)
     has_main: bool = field(init=False)
 
-    # PythonFile.__post_init__():
+    # PyFile.__post_init__():
     def __post__init__(self) -> None:
-        """Finish initializing a PythonFile."""
+        """Finish initializing a PyFile."""
         self.detects_main = False
         self.has_main = False
         file: IO[str]
@@ -474,22 +474,22 @@ class PythonFile:
                   and line[-1] == ":" and line[-6:-1] == "__main__"):
                 self.detects_main = True
 
-    # PythonFile.process():
+    # PyFile.process():
     def process(self, modules: "List[PyModule]", errors: List[str], tracing: str = "") -> None:
-        """Process a PythonFile.
+        """Process a PyFile.
 
         Arguments:
         * modules (List[PyModule]): A list to collect all PyModules onto.
         * errors (List[str]): A list to collect any generated errors on.
 
-        Process the PythonFile (*self*) and append the generated PyModule to *modulues*.
+        Process the PyFile (*self*) and append the generated PyModule to *modulues*.
         Any error message lines are append to *error*s.
 
         """
         next_tracing = tracing + " " if tracing else ""
         module_name: str = f"{self.py_path}"
         if tracing:
-            print(f"{tracing}=>PythonFile.process({module_name}, *")
+            print(f"{tracing}=>PyFile.process({module_name}, *")
 
         module: Any = None  # TODO: figure out what the real type is.
         try:
@@ -511,7 +511,29 @@ class PythonFile:
         modules.append(py_module)
 
         if tracing:
-            print(f"{tracing}<=PythonFile.process({module_name}, *, *")
+            print(f"{tracing}<=PyFile.process({module_name}, *, *")
+
+
+# PyPackage:
+@dataclass
+class PyPackage(PyBase):
+    """PyPackage: Represents a Python package `__init.py__` file.
+
+    Inherited Attributes:
+    * *Name* (str): The package name (i.e name of directory containing the `__init__.py` file.)
+    * *Lines* (Tuple[str, ...) , *Anchor*, *Number* from PyBase.
+
+    Attributes:
+    * *Class* (Any): The underlying Python class object that is imported.
+    * *Functions* (Tuple[PyFunction, ...]): The various functions associated with the Class.
+
+    Constructor:
+    * PyPackage()
+
+    """
+
+    Class: Any = field(repr=False)
+    Functions: Tuple[PyFunction, ...] = field(init=False, default=())
 
 
 # Arguments:
@@ -525,14 +547,14 @@ class Arguments:
     Attributes:
     * *arguments*:
       The original command line arguments excluding the initial program name (i.e. `sys.argv[1:]`).
-    * *python_files* (List[PythonFile, ...]):
-      The associated PythonFile objects for each Python (.py) file to be processed.
+    * *python_files* (List[PyFile, ...]):
+      The associated PyFile objects for each Python (.py) file to be processed.
     * *errors* (Tuple[str, ...]):
       A list of error strings that get generated.
     * unit_test* (bool):
     * *markdown_program* (Optional[Path]):
-    * *sorted_python_files* (Tuple[PythonFile, ...]):
-      The PythonFile's sorted by their Path name.
+    * *sorted_python_files* (Tuple[PyFile, ...]):
+      The PyFile's sorted by their Path name.
 
     Constructor:
     * Arguments(arguments)  # See Arguments.__post_init__() for more details
@@ -540,14 +562,14 @@ class Arguments:
     """
 
     arguments: Tuple[str, ...]
-    python_files: List[PythonFile] = field(init=False)
+    python_files: List[PyFile] = field(init=False)
     errors: List[str] = field(init=False)
     unit_test: bool = field(init=False)
     markdown_program: Optional[str] = field(init=False)
-    sorted_python_files: Tuple[PythonFile, ...] = field(init=False)
+    sorted_python_files: Tuple[PyFile, ...] = field(init=False)
 
     def __post_init__(self) -> None:
-        """Process the command line arguments and generate any associated PythonFile's and errors.
+        """Process the command line arguments and generate any associated PyFile's and errors.
 
         * *arguments* (Tuple[str, ...]):
           The command line arguments consist of a sequence of `.py` files, directory names and
@@ -622,7 +644,7 @@ class Arguments:
                     md_path: Path = docs_directory / f"{py_base}.md"
                     html_path: Path = docs_directory / f"{py_base}.html"
                     print(f"---------->{docs_directory=} {md_path=} {html_path=}")
-                    python_file = PythonFile(python_path, md_path, html_path, markdown_program)
+                    python_file = PyFile(python_path, md_path, html_path, markdown_program)
                     self.python_files.append(python_file)
                 else:
                     self.errors.append(f"{argument} Python file does not exist")
@@ -637,8 +659,8 @@ class Arguments:
         if not self.python_files:
             self.scan_directory(current_working_directory, docs_directory)
 
-        python_files_table: Dict[Path, PythonFile] = {python_file.py_path: python_file
-                                                      for python_file in self.python_files}
+        python_files_table: Dict[Path, PyFile] = {python_file.py_path: python_file
+                                                  for python_file in self.python_files}
         sorted_py_paths: Tuple[Path, ...] = tuple(
             sorted(python_file.py_path for python_file in self.python_files))
         py_path: Path
@@ -662,7 +684,7 @@ class Arguments:
             python_base: str = python_path.stem
             html_path: Path = docs_directory / f"{python_base}.html"
             md_path: Path = docs_directory / f"{python_base}.md"
-            python_file: PythonFile = PythonFile(
+            python_file: PyFile = PyFile(
                 python_path, md_path, html_path, self.markdown_program)
             self.python_files.append(python_file)
         else:
@@ -750,7 +772,7 @@ def main(tracing: str = "") -> int:
     if arguments.unit_test:
         arguments.unit_tests(tracing=next_tracing)
 
-    sorted_python_files: Tuple[PythonFile, ...] = arguments.sorted_python_files
+    sorted_python_files: Tuple[PyFile, ...] = arguments.sorted_python_files
     sorted_python_paths: Tuple[Path, ...] = tuple(
         python_file.py_path for python_file in sorted_python_files)
     if tracing:
