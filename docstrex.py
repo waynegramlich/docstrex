@@ -52,28 +52,10 @@ class ModelDoc(object):
         * *doc_string* (Optional[str]):
            A raw documentation string or None if no documentation string is present.
 
-        This method takes a raw doc string where the first line has no embedded indentation
-        spacing and subsequent non-empty lines have common indentation padding and converts
-        them into sequence of lines that have the common inendation removed.
-
-        Consider the following example function:
-            ```
-            # This is a top level function where the `def` has no preceeding white space.
-            def compute_average(self, data: Sequence(float, ...) -> float:
-                '''Compute the average of numbers.
-
-                Arguments:
-                * data (Sequnce(float)):
-                  The data to average
-
-                Returns:
-                * (float): The computed average
-                '''
-            ```
-        The doc string retrieved from the code is "Compute average of numbers\n\n   Arguments\n..."
-        When this function is done, the first 4 spaces from the second and subsequent lines is
-        removed resulting in ["Compute the average of numbers", "", "Arguments", ...].  This
-        data is store into the *Lines* attribute of the ModelDoc class.
+        *doc_string* is split into lines.  Both the first line and all subsequent empty lines
+        are ignored to determine the actual doc string indentation level.  The approproiate
+        lines have there indentation padding removed before being stored into ModelDoc.Lines
+        attributes.
 
         """
         self.Lines = ("NO DOC STRING!",)
@@ -84,7 +66,8 @@ class ModelDoc(object):
             # Compute the *common_indent* in spaces ignoring empty lines:
             big: int = 123456789
             common_indent: int = big
-            for line in lines[1:]:   # Skip the first line which is special.
+            # The first line of a doc string has no indentation padding, but all other lines do.
+            for line in lines[1:]:
                 indent: int = len(line) - len(line.lstrip())
                 if line:  # Skip empty lines:
                     common_indent = min(common_indent, indent)
@@ -447,12 +430,20 @@ class PythonFile:
     """PythonFile: A class that is one-to-one with a Python file.
 
     Attributes:
-    * *py_path* (Path): The path to the Python source.
-    * *md_path* (Path): The path to the generated markdown (.md) file.
-    * *html_path* (Path): The path to the generated HTML (.html) file.
+    * *py_path* (Path):
+      The path to the Python source.
+    * *md_path* (Path):
+      The path to the generated markdown (.md) file.
+    * *html_path* (Path):
+       The path to the generated HTML (.html) file.
     * *markdown_program* (Optional[str]):
       The path to the program that coverts a .md file into a .html file.
       Defaults to None, if no converter is present.
+    * *detects_main* (bool):
+      True if either `if __name__ == "__main__:"` or `if __name__ == '__main__:` is present in file.
+      (Default is False.)
+    * has_main: (bool):
+      True if `def main(` is present in file.  (Default is False.)
 
     Constructor:
     * PythonFile(py_path, md_path, html_path, markdown_convert)
@@ -463,6 +454,25 @@ class PythonFile:
     md_path: Path
     html_path: Path
     markdown_program: Optional[str]
+    detects_main: bool = field(init=False)
+    has_main: bool = field(init=False)
+
+    # PythonFile.__post_init__():
+    def __post__init__(self) -> None:
+        """Finish initializing a PythonFile."""
+        self.detects_main = False
+        self.has_main = False
+        file: IO[str]
+        lines: List[str]
+        with open(self.py_path, "r") as file:
+            lines = "/n".split(file.read())
+        line: str
+        for line in lines:
+            if line.startswith("def main("):
+                self.has_main = True
+            elif (line.startswith("if __name__ == ")
+                  and line[-1] == ":" and line[-6:-1] == "__main__"):
+                self.detects_main = True
 
     # PythonFile.process():
     def process(self, modules: "List[ModelModule]", errors: List[str], tracing: str = "") -> None:
