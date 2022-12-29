@@ -19,10 +19,10 @@ import tempfile  # Used for unit tests.
 from typing import Any, Callable, cast, Dict, IO, List, Tuple, Optional
 
 
-# ModelDoc:
+# PyDoc:
 @dataclass
-class ModelDoc(object):
-    """ModelDoc: Base class ModelFunction, ModelClass, and ModelModule classes.
+class PyDoc(object):
+    """PyDoc: Base class PyFunction, PyClass, and PyModule classes.
 
     Attributes:
     * *Name* (str):
@@ -44,9 +44,9 @@ class ModelDoc(object):
     Anchor: str = field(init=False, repr=False, default="")
     Number: str = field(init=False, repr=False, default="??")
 
-    # ModelDoc.set_lines():
+    # PyDoc.set_lines():
     def set_lines(self, doc_string: Optional[str]) -> None:
-        """Set the Lines field of a ModelDoc.
+        """Set the Lines field of a PyDoc.
 
         Arguments:
         * *doc_string* (Optional[str]):
@@ -54,7 +54,7 @@ class ModelDoc(object):
 
         *doc_string* is split into lines.  Both the first line and all subsequent empty lines
         are ignored to determine the actual doc string indentation level.  The approproiate
-        lines have there indentation padding removed before being stored into ModelDoc.Lines
+        lines have there indentation padding removed before being stored into PyDoc.Lines
         attributes.
 
         """
@@ -96,9 +96,9 @@ class ModelDoc(object):
 
             self.Lines = tuple(lines)
 
-    # ModelDoc.set_annotations():
+    # PyDoc.set_annotations():
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
-        """Set the ModelDoc Anchor and Number attributes.
+        """Set the PyDoc Anchor and Number attributes.
 
         Arguments:
         * *anchor_prefix* (str):
@@ -112,10 +112,10 @@ class ModelDoc(object):
         raise NotImplementedError(f"{self}.set_annotations() is not implemented.")
 
 
-# ModelFunction:
+# PyFunction:
 @dataclass
-class ModelFunction(ModelDoc):
-    """ModelFunction: Represents a function or method.
+class PyFunction(PyDoc):
+    """PyFunction: Represents a function or method.
 
     Inherited Attributes:
     * *Name* (str)
@@ -127,34 +127,34 @@ class ModelFunction(ModelDoc):
     *  *Function* (Callable): The actual function/method object.
 
     Constructor:
-    * ModelFunction(Name, Lines, Anchor, Number, Function)
+    * PyFunction(Name, Lines, Anchor, Number, Function)
 
     """
 
     Function: Callable
 
-    # ModelFunction.__post_init__():
+    # PyFunction.__post_init__():
     def __post_init__(self) -> None:
-        """Post process a ModelFunction."""
+        """Post process a PyFunction."""
         function: Callable = self.Function
         if hasattr(function, "__name__"):
             self.Name = getattr(function, "__name__")
         if hasattr(function, "__doc__"):
             self.set_lines(getattr(function, "__doc__"))
 
-    # ModelFunction.set_annotations():
+    # PyFunction.set_annotations():
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
         """Set the markdown annotations.
 
-        (see [ModeDoc.set_annoations](#Doc-ModelDoc-set_annotations)
+        (see [ModeDoc.set_annoations](#Doc-PyDoc-set_annotations)
 
         """
         self.Anchor = anchor_prefix + self.Name.lower().replace("_", "-")
         self.Number = number_prefix
 
-    # ModelFunction.summary_lines():
+    # PyFunction.summary_lines():
     def summary_lines(self, class_name: str, indent: str) -> Tuple[str, ...]:
-        """Return ModelModule table of contents summary lines.
+        """Return PyModule table of contents summary lines.
 
         Arguments:
         * *class_name*: The class name the function is a member of.
@@ -168,9 +168,9 @@ class ModelFunction(ModelDoc):
         return (f"{indent}* {self.Number} [{self.Name}()]"
                 f"(#{self.Anchor}): {self.Lines[0]}",)
 
-    # ModelFunction.documentation_lines():
+    # PyFunction.documentation_lines():
     def documentation_lines(self, class_name: str, prefix: str) -> Tuple[str, ...]:
-        """Return the ModelModule documentation lines.
+        """Return the PyModule documentation lines.
 
         Arguments:
         * *class_Name* (str): The class name to use for methods.
@@ -192,30 +192,30 @@ class ModelFunction(ModelDoc):
         return doc_lines
 
 
-# ModelClass:
+# PyClass:
 @dataclass
-class ModelClass(ModelDoc):
-    """ModelClass: Represents a class method.
+class PyClass(PyDoc):
+    """PyClass: Represents a class method.
 
     Inherited Attributes:
     * *Name* (str): The attribute name.
-    * *Lines* ( , *Anchor*, *Number* from ModelDoc.
+    * *Lines* ( , *Anchor*, *Number* from PyDoc.
 
     Attributes:
     * *Class* (Any): The underlying Python class object that is imported.
-    * *Functions* (Tuple[ModelFunction, ...]): The various functions associated with the Class.
+    * *Functions* (Tuple[PyFunction, ...]): The various functions associated with the Class.
 
     Constructor:
-    * ModelClass()
+    * PyClass()
 
     """
 
     Class: Any = field(repr=False)
-    Functions: Tuple[ModelFunction, ...] = field(init=False, default=())
+    Functions: Tuple[PyFunction, ...] = field(init=False, default=())
 
-    # ModelClass.__post_init__():
+    # PyClass.__post_init__():
     def __post_init__(self) -> None:
-        """Post process ModelClass."""
+        """Post process PyClass."""
         # Set Name and Lines attributes:
         if hasattr(self.Class, "__name__"):
             self.Name = cast(str, getattr(self.Class, "__name__"))
@@ -223,15 +223,15 @@ class ModelClass(ModelDoc):
             self.set_lines(cast(str, getattr(self.Class, "__doc__")))
 
         # Set the Functions attribute:
-        model_functions: List[ModelFunction] = []
+        py_functions: List[PyFunction] = []
         attribute_name: str
         attribute: Any
         for attribute_name, attribute in self.Class.__dict__.items():
             if not attribute_name.startswith("_") and callable(attribute):
-                model_functions.append(ModelFunction(attribute))
-        self.Functions = tuple(model_functions)
+                py_functions.append(PyFunction(attribute))
+        self.Functions = tuple(py_functions)
 
-    # ModelClass.set_annotations():
+    # PyClass.set_annotations():
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
         """Set the Markdown anchor."""
         anchor: str = anchor_prefix + self.Name.lower().replace("_", "-")
@@ -239,24 +239,24 @@ class ModelClass(ModelDoc):
         self.Number = number_prefix
 
         next_anchor_prefix: str = anchor_prefix + "--"
-        model_function: ModelFunction
-        for index, model_function in enumerate(self.Functions):
-            model_function.set_annotations(next_anchor_prefix, f"{number_prefix}.{index + 1}")
+        py_function: PyFunction
+        for index, py_function in enumerate(self.Functions):
+            py_function.set_annotations(next_anchor_prefix, f"{number_prefix}.{index + 1}")
 
-    # ModelClass.summary_lines():
+    # PyClass.summary_lines():
     def summary_lines(self, indent: str) -> Tuple[str, ...]:
-        """Return ModelModule summary lines."""
+        """Return PyModule summary lines."""
         lines: List[str] = [
             f"{indent}* {self.Number} Class: [{self.Name}](#{self.Anchor}):"]
         next_indent: str = indent + "  "
-        model_function: ModelFunction
-        for model_function in self.Functions:
-            lines.extend(model_function.summary_lines(self.Name, next_indent))
+        py_function: PyFunction
+        for py_function in self.Functions:
+            lines.extend(py_function.summary_lines(self.Name, next_indent))
         return tuple(lines)
 
-    # ModelClass.documentation_lines():
+    # PyClass.documentation_lines():
     def documentation_lines(self, prefix: str) -> Tuple[str, ...]:
-        """Return the ModelModule documentation lines."""
+        """Return the PyModule documentation lines."""
         lines: Tuple[str, ...] = self.Lines
         doc_lines: List[str] = [
             f"{prefix} <a name=\"{self.Anchor}\"></a>{self.Number} Class {self.Name}:",
@@ -265,22 +265,22 @@ class ModelClass(ModelDoc):
         doc_lines.extend(lines)
         doc_lines.append("")
         next_prefix: str = prefix + "#"
-        function: ModelFunction
+        function: PyFunction
         for function in self.Functions:
             doc_lines.extend(function.documentation_lines(self.Name, next_prefix))
         doc_lines.append("")
         return tuple(doc_lines)
 
 
-# ModelModule:
+# PyModule:
 @dataclass
-class ModelModule(ModelDoc):
-    """ModelModule: Represents a module."""
+class PyModule(PyDoc):
+    """PyModule: Represents a module."""
 
     Module: Any = field(repr=False)
-    Classes: Tuple[ModelClass, ...] = field(init=False, default=())
+    Classes: Tuple[PyClass, ...] = field(init=False, default=())
 
-    # ModelModule.__post_init__():
+    # PyModule.__post_init__():
     def __post_init__(self) -> None:
         """Recursively extract information from an object."""
         module: Any = self.Module
@@ -309,8 +309,8 @@ class ModelModule(ModelDoc):
 
         # The Python import statement can import class to the module namespace.
         # We are only interested in classes that are defined in *module*:
-        model_classes: List[ModelClass] = []
-        class_type: type = type(ModelDoc)  # Any class name to get the associated class type.
+        py_classes: List[PyClass] = []
+        class_type: type = type(PyDoc)  # Any class name to get the associated class type.
         assert isinstance(class_type, type)
         attribute_name: str
         # print(f"{module=} {type(module)=}")
@@ -321,26 +321,26 @@ class ModelModule(ModelDoc):
                     defining_module: Any = getattr(attribute, "__module__")
                     # print(f"{attribute_name=} {attribute=} {defining_module}")
                     if isinstance(attribute, class_type) and str(defining_module) == module_name:
-                        model_classes.append(ModelClass(attribute))
+                        py_classes.append(PyClass(attribute))
                         # print(f">>>>>>>>>>Defined class: {attribute_name}")
         self.Name = module_name
-        self.Classes = tuple(model_classes)
+        self.Classes = tuple(py_classes)
 
-    # ModelModule.set_annotations():
+    # PyModule.set_annotations():
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
         """Set the Markdown anchor."""
         anchor: str = anchor_prefix + self.Name.lower().replace("_", "-")
         self.Anchor = anchor
 
         next_anchor_prefix: str = anchor + "--"
-        model_class: ModelClass
+        py_class: PyClass
         index: int
-        for index, model_class in enumerate(self.Classes):
-            model_class.set_annotations(next_anchor_prefix, f"{index + 1}")
+        for index, py_class in enumerate(self.Classes):
+            py_class.set_annotations(next_anchor_prefix, f"{index + 1}")
 
-    # ModelModule.summary_lines():
+    # PyModule.summary_lines():
     def summary_lines(self) -> Tuple[str, ...]:
-        """Return ModelModule summary lines."""
+        """Return PyModule summary lines."""
         # Create the Title
         lines: List[str] = []
         if self.Name == "__init__":
@@ -355,35 +355,35 @@ class ModelModule(ModelDoc):
                 lines.append("")
 
             # Fill in the rest of the table of contents:
-            model_class: ModelClass
+            py_class: PyClass
             next_indent: str = ""
-            for model_class in self.Classes:
-                lines.extend(model_class.summary_lines(next_indent))
+            for py_class in self.Classes:
+                lines.extend(py_class.summary_lines(next_indent))
             lines.append("")
         return tuple(lines)
 
-    # ModelModule.documentation_lines():
+    # PyModule.documentation_lines():
     def documentation_lines(self, prefix: str) -> Tuple[str, ...]:
-        """Return the ModelModule documentation lines."""
+        """Return the PyModule documentation lines."""
         # lines: Tuple[str, ...]  = self.Lines
         # doc_lines: List[str] = [f"{prefix} <a name=\"{self.Anchor}\"></a>{lines[0]}", ""]
         # doc_lines.extend(lines[1:])
 
         doc_lines: List[str] = []
         next_prefix: str = prefix + "#"
-        model_class: ModelClass
-        for model_class in self.Classes:
-            doc_lines.extend(model_class.documentation_lines(next_prefix))
+        py_class: PyClass
+        for py_class in self.Classes:
+            doc_lines.extend(py_class.documentation_lines(next_prefix))
         doc_lines.append("")
         return tuple(doc_lines)
 
-    # ModelModule.generate():
+    # PyModule.generate():
     def generate(self, markdown_path: Path, markdown_program: str, tracing) -> None:
         """Generate the markdown and HTML files."""
         # Compute *markdown_lines*:
         # next_tracing: str = tracing + " " if tracing else ""
         if tracing:
-            print(f"{tracing}=>ModelModule.generate({markdown_path}, {markdown_program})")
+            print(f"{tracing}=>PyModule.generate({markdown_path}, {markdown_program})")
         module_summary_lines: Tuple[str, ...] = self.summary_lines()
         module_documentation_lines: Tuple[str, ...] = self.documentation_lines("#")
         markdown_lines: Tuple[str, ...] = (
@@ -421,7 +421,7 @@ class ModelModule(ModelDoc):
                 assert isinstance(output, bytes)
                 html_file.write(output)
         if tracing:
-            print(f"{tracing}<=ModelModule.generate({markdown_path}, {markdown_program})")
+            print(f"{tracing}<=PyModule.generate({markdown_path}, {markdown_program})")
 
 
 # PythonFile:
@@ -475,14 +475,14 @@ class PythonFile:
                 self.detects_main = True
 
     # PythonFile.process():
-    def process(self, modules: "List[ModelModule]", errors: List[str], tracing: str = "") -> None:
+    def process(self, modules: "List[PyModule]", errors: List[str], tracing: str = "") -> None:
         """Process a PythonFile.
 
         Arguments:
-        * modules (List[ModelModule]): A list to collect all ModelModules onto.
+        * modules (List[PyModule]): A list to collect all PyModules onto.
         * errors (List[str]): A list to collect any generated errors on.
 
-        Process the PythonFile (*self*) and append the generated ModelModule to *modulues*.
+        Process the PythonFile (*self*) and append the generated PyModule to *modulues*.
         Any error message lines are append to *error*s.
 
         """
@@ -501,15 +501,14 @@ class PythonFile:
         if module is None:  # pragma: no unit cover
             errors.append(f"Unable to open module {module_name}: Not clear why")
 
-        model_module: ModelModule = ModelModule(module)
-        model_module.set_annotations("", "")
+        py_module: PyModule = PyModule(module)
+        py_module.set_annotations("", "")
         md_path: Path = self.md_path
         try:
-            model_module.generate(md_path,
-                                  f"{self.markdown_program}", tracing=next_tracing)
+            py_module.generate(md_path, f"{self.markdown_program}", tracing=next_tracing)
         except RuntimeError as runtime_error:  # pragma: no unit cover
             errors.append(f"{md_path}: runtime error {runtime_error}")
-        modules.append(model_module)
+        modules.append(py_module)
 
         if tracing:
             print(f"{tracing}<=PythonFile.process({module_name}, *, *")
@@ -728,7 +727,7 @@ class Arguments:
     #         module_names.add(argument)
 
     # # __init__.py get imported as a side-effect of reading the other packages.
-    # # Thus, if "__init__" is *model_names*, it must be the first module opened.
+    # # Thus, if "__init__" is *py_names*, it must be the first module opened.
     # first_module: Tuple[str, ...] = ()
     # if "__init__" in module_names:
     #     module_names.remove("__init__")
@@ -757,7 +756,7 @@ def main(tracing: str = "") -> int:
     if tracing:
         print(f"{tracing}{sorted_python_paths=}")
 
-    modules: List[ModelModule] = []
+    modules: List[PyModule] = []
     errors: List[str] = []
     for python_file in sorted_python_files:
         python_file.process(modules, errors, tracing=next_tracing)
@@ -771,7 +770,7 @@ def main(tracing: str = "") -> int:
 
 """
     # For each *module_name*, import it, generate documentation, and write it out:
-    modules: List[ModelModule] = []
+    modules: List[PyModule] = []
     module_name: str
     for module_name in module_names:
         # Import each Module Name and process it:
@@ -787,13 +786,13 @@ def main(tracing: str = "") -> int:
             print(f"Unable to open module '{module_name}': Not clear why")
             return 1
 
-        model_module: ModelModule = ModelModule(module)
-        model_module.set_annotations("", "")
-        modules.append(model_module)
+        py_module: PyModule = PyModule(module)
+        py_module.set_annotations("", "")
+        modules.append(py_module)
 
         # Generate Markdown and HTML files:
         try:
-            model_module.generate(document_directory, markdown_program)
+            py_module.generate(document_directory, markdown_program)
         except RuntimeError as runtime_error:  # pragma: no unit cover
             print(runtime_error)
             return 1
