@@ -19,3 +19,7 @@ cover:
 
 clean:
 	rm -f $(PROGRAM),cover
+
+test:
+	echo "Running unit tests"
+	pydocstyle --unit-test

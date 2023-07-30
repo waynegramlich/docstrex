@@ -1,7 +1,24 @@
 #!/usr/bin/env python3
-"""pyds2md: Convert Python doc strings to markdown and HTML files.
+"""docxtrex: DOCument STRing EXtract -- Convert doc strings to markdown.
 
-The program has [usage documentation](docs/__init__.py) stored in another file.
+This program takes a list of individual Python Files and/or directories containing Python files,
+reads the associated documentation strings and generates a single Markdown file.
+
+The simple command line usage is:
+     ```
+     docstrex [--outfile=OUT_FILE] [--markdown=MARKDOWN_PROG] [--unit_tests] [PY_FILE_OR_DIR...]
+     ```
+If `--outfile=FILE` is not specified, `README.md` is generated in the current working directory.
+If `--markdown=MARKDOWN_PROG` is specified, MARKDOWN_PROG is used to convert OUTFILE to an
+HTML (`.html`) file.  The remaining arguments are one or more Python (`.py`) files or directories
+that contain python files (`.py`)  If no files or directories are specified, the current working
+directory is scanned for Python files.  (If `--unit_tests]` is specified, the unit tests are
+are run.)
+
+When an `__init__.py` is present in a scanned directory, it indicates that the directory should
+be treated as a Python package.  As such, the first documentation string in the `__init__.py` file
+is shown first in the documentation for the Python package.
+
 """
 
 # <--------------------------------------- 100 characters ---------------------------------------> #
@@ -22,7 +39,7 @@ from typing import Any, Callable, cast, Dict, IO, List, Tuple, Optional
 # PyBase:
 @dataclass
 class PyBase(object):
-    """PyBase: Base class PyFunction, PyClass, PyModule, and PyPackage classes.
+    """PyBase: Base class for the PyFunction, PyClass, PyModule, and PyPackage classes.
 
     Attributes:
     * *Name* (str):
@@ -33,7 +50,7 @@ class PyBase(object):
     * *Anchor* (str):
        The generated Markdown anchor for the documentation element.
        It is of the form "MODULE--CLASS--FUNCTION", where the module/class/function names
-       have underscores converted to hyphen.
+       have underscores converted to hyphens.
     * *Number* (str):
        The Table of contents number as a string.  '#" for classes and "#.#" for functions.
 
@@ -53,8 +70,8 @@ class PyBase(object):
            A raw documentation string or None if no documentation string is present.
 
         *doc_string* is split into lines.  Both the first line and all subsequent empty lines
-        are ignored to determine the actual doc string indentation level.  The approproiate
-        lines have there indentation padding removed before being stored into PyBase.Lines
+        are used to determine the actual doc string indentation level.  The approproiate
+        lines have their indentation padding removed before being stored into PyBase.Lines
         attributes.
 
         """
@@ -90,7 +107,7 @@ class PyBase(object):
             while lines and lines[-1] == "":
                 lines.pop()
 
-            # Strip off blank lines between summary line an body:
+            # Strip off blank lines between summary line and body:
             while len(lines) >= 2 and lines[1] == "":
                 del(lines[1])
 
@@ -378,7 +395,7 @@ class PyModule(PyBase):
         return tuple(doc_lines)
 
     # PyModule.generate():
-    def generate(self, markdown_path: Path, markdown_program: str, tracing) -> None:
+    def generate(self, markdown_path: Path, markdown_program: str, tracing: str = "") -> None:
         """Generate the markdown and HTML files."""
         # Compute *markdown_lines*:
         # next_tracing: str = tracing + " " if tracing else ""
@@ -401,7 +418,8 @@ class PyModule(PyBase):
             markdown_file: IO[str]
             if tracing:
                 print(f"{tracing}Writing out {markdown_path}")
-            with open(markdown_path, "w") as markdown_file:
+            # FIXME: Gross hack!!!
+            with open("README.md", "w") as markdown_file:
                 markdown_file.write("\n".join(markdown_lines))
         except IOError:  # pragma: no unit covert
             raise RuntimeError(f"Unable to write to {markdown_path}")
@@ -772,6 +790,10 @@ def main(tracing: str = "") -> int:
     if arguments.unit_test:
         arguments.unit_tests(tracing=next_tracing)
 
+    arguments2: Arguments2 = Arguments2(command_line_arguments)
+    if arguments.unit_test:
+        arguments2.run_unit_tests(tracing=next_tracing)
+
     sorted_python_files: Tuple[PyFile, ...] = arguments.sorted_python_files
     sorted_python_paths: Tuple[Path, ...] = tuple(
         python_file.py_path for python_file in sorted_python_files)
@@ -788,6 +810,190 @@ def main(tracing: str = "") -> int:
     return_code: int = int(len(errors) != 0)
     print(f"{tracing}<=main()")
     return return_code
+
+
+@dataclass
+class Arguments2:
+    """Arguments2: The new and improved arguments scanner.
+
+    Attributes:
+    * arguments (Tuple[str, ...]):
+      The command line arguments to process.
+    * errors (List[str]):
+      The list of errors collected during argument line parsing.
+    * markdown: (Optional[Path]):
+      The executable to to use to convert markdown into HTML.
+    * output_path: (Optional[Path]):
+      The file to write the output to.
+    * package_paths: Tuple[Path, ...]:
+      The directories that contain Python packages (i.e. an `__init__.py` file.)
+    * python_paths: Tuple[Path, ...]:
+      The paths to the Python files to scan.
+    * unit_tests: (bool):
+      True to true if `--unit-tests` flag is present.
+
+    Constructor:
+    * Arguments2(arguments)
+    """
+
+    arguments: Tuple[str, ...]
+    errors: List[str] = field(init=False)
+    markdown_path: Optional[Path] = field(init=False)
+    output_path: Path = field(init=False)
+    python_paths: List[Path] = field(init=False)
+    package_paths: List[Path] = field(init=False)
+    unit_tests: bool = field(init=False)
+
+    # Arguments2.__post_init__():
+    def __post_init__(self) -> None:
+        """Perform Arguments2 post initialization."""
+        # Ensure that all attributes are initializes:
+        self.errors = []
+        self.markdown_path = None
+        which_markdown: Optional[str] = shutil.which("markdown")
+        if which_markdown:
+            self.markdown_path = Path(which_markdown)
+        readme: Path = Path("README.md")
+        if Arguments2._check_file_writable(str(readme)):
+            self.output_path = readme
+        self.python_paths = []
+        self.package_paths = []
+        self.unit_tests = False
+
+        # Execute each process method in turn until one succeeds:
+        errors: List[str] = self.errors
+        argument: str
+        for argument in self.arguments:
+            # Attempt to process each different argument flag and stop after first one succeeds.
+            if self._match_markdown_flag(argument):
+                continue
+            if self._match_output_flag(argument):
+                continue
+            if self._match_unit_tests_flag(argument):
+                continue
+            if self._match_file_or_directory(argument):
+                continue
+            errors.append(f"Unable to process argument '{argument}'")
+
+    # Arguments2._match_markdown_flag():
+    def _match_markdown_flag(self, argument: str) -> bool:
+        """Match the `markdown=...` flag.
+
+        Args:
+            argument (str): The argument to match against.
+
+        Returns:
+            True if a match is found and False otherwise.
+
+        """
+        MARKDOWN_PREFIX: str = "--markdown="
+        match: bool = False
+        if argument.startswith(MARKDOWN_PREFIX):
+            full_path: Optional[str] = shutil.which(argument[:len(MARKDOWN_PREFIX)])
+            if full_path:
+                assert isinstance(full_path, str)
+                self.markdown = Path(full_path)
+                match = True
+            else:
+                self.errors += f"'{argument}' markdown executable not found"
+        return match
+
+    # Arguments2._match_output_flag():
+    def _match_output_flag(self, argument: str) -> bool:
+        """Match a 'output=...' flag.
+
+        Args:
+            argument (str): The argument to match against.
+
+        Returns:
+            True if a match is found and False otherwise.
+
+        """
+        OUTPUT_PREFIX: str = "--output="
+        found: bool = False
+        if argument.startswith(OUTPUT_PREFIX):
+            output_path: Path = Path(argument[:len(OUTPUT_PREFIX)])
+            if self._check_file_writable(str(output_path)):
+                self.output_path = output_path
+                found = True
+            else:
+                self.errors += f"Unable to write to {output_path}"
+        return found
+
+    # Arguments2._match_unit_tests():
+    def _match_unit_tests_flag(self, argument) -> bool:
+        """Match --unit-tests flag.
+
+        Args:
+            argument (str): The argument to match against.
+
+        Returns:
+            True if a match is found and False otherwise.
+
+        """
+        match: bool = argument == "--unit-tests"
+        if match:
+            self.unit_tests = True
+        return match
+
+    # Arguments2._match_file_or_directory():
+    def _match_file_or_directory(self, argument: str) -> bool:
+        """Process an argument if it is file or directory.
+
+        Arguments:
+            file_name (str): The file name to check for writable.
+
+        Returns:
+            True if writable and False otherwise.
+        """
+        path: Path = Path(argument)
+        match: bool = False
+        if path.exists():
+            if path.suffix == ".py":
+                self.python_paths.append(Path(path))
+                match = True
+            elif path.is_dir():
+                init_py: Path = path / "__init__.py"
+                if init_py.is_file():
+                    self.package_paths.append(path)
+                    match = True
+        if not match:
+            self.errors += f"'{argument}' is neither Python file or Python package."
+
+        return match
+
+    # Arguments2._check_file_writable():
+    @staticmethod
+    def _check_file_writable(file_name: str) -> bool:
+        """Check if a file is writable.
+
+        Arguments:
+            file_name (str): The file name to check for writable.
+
+        Returns:
+            True if writable and False otherwise.
+
+        """
+        # See [Section 3.2](https://www.novixys.com/blog/python-check-file-can-read-write/):
+        if os.path.exists(file_name):
+            # path exists
+            if os.path.isfile(file_name):  # is it a file or a dir?
+                # also works when file is a link and the target is writable
+                return os.access(file_name, os.W_OK)
+            else:
+                return False  # path is a dir, so cannot write as a file
+
+        # target does not exist, check perms on parent dir
+        pdir = os.path.dirname(file_name)
+        if not pdir:
+            pdir = '.'
+        # target is creatable if parent dir is writable
+        return os.access(pdir, os.W_OK)
+
+    # Arguments2.run_unit_tests():
+    def run_unit_tests(self, tracing: str = "") -> None:
+        """Run Arguments2 unit tests."""
+        pass
 
 
 """
