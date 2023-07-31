@@ -1,5 +1,6 @@
 *~
 *,cover
+*-n
 .coverage
 __pycache__
 docs

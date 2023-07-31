@@ -4,7 +4,7 @@ reads the associated documentation strings and generates a single Markdown file.
 
 The simple command line usage is:
      ```
-     docstrex [--outfile=OUT_FILE] [--markdown=MARKDOWN_PROG] [--unit_tests] [PY_FILE_OR_DIR...]
+     docstrex.py [--outfile=OUT_FILE] [--markdown=MARKDOWN_PROG] [--unit_tests] [PY_FILE_OR_DIR...]
      ```
 If `--outfile=FILE` is not specified, `README.md` is generated in the current working directory.
 If `--markdown=MARKDOWN_PROG` is specified, MARKDOWN_PROG is used to convert OUTFILE to an
@@ -23,7 +23,14 @@ is shown first in the documentation for the Python package.
   * 1.1 [scan_directory()](#docstrex----scan-directory): Scan directory for Python files.
   * 1.2 [unit_tests()](#docstrex----unit-tests): Run unit tests on Arguments.
 * 2 Class: [Arguments2](#docstrex--arguments2):
-  * 2.1 [run_unit_tests()](#docstrex----run-unit-tests): Run Arguments2 unit tests.
+  * 2.1 [process_arguments()](#docstrex----process-arguments): Process the arguments for an Arguments2 object.
+  * 2.2 [match_markdown_flag()](#docstrex----match-markdown-flag): Match the `markdown=...` flag.
+  * 2.3 [match_output_flag()](#docstrex----match-output-flag): Match a 'output=...' flag.
+  * 2.4 [match_unit_tests_flag()](#docstrex----match-unit-tests-flag): Match --unit-tests flag.
+  * 2.5 [match_file_or_directory()](#docstrex----match-file-or-directory): Process an argument if it is file or directory.
+  * 2.6 [scan_directory()](#docstrex----scan-directory): Scan a directory for Python files.
+  * 2.7 [check_file_writable()](#docstrex----check-file-writable): Check if a file is writable.
+  * 2.8 [run_unit_tests()](#docstrex----run-unit-tests): Run Arguments2 unit tests.
 * 3 Class: [PyBase](#docstrex--pybase):
   * 3.1 [set_lines()](#docstrex----set-lines): Set the Lines field of a PyBase.
   * 3.2 [set_annotations()](#docstrex----set-annotations): Set the PyBase Anchor and Number attributes.
@@ -67,7 +74,7 @@ Constructor:
 
 ### <a name="docstrex----scan-directory"></a>1.1 `Arguments.`scan_directory():
 
-Arguments.scan_directory(self, directory_path: pathlib.Path, docs_directory: pathlib.Path) -> None:
+Arguments.scan_directory(self, directory_path: pathlib.Path, docs_directory: pathlib.Path, tracing: str = '') -> None:
 
 Scan directory for Python files.
 Arguments:
@@ -90,7 +97,7 @@ Run unit tests on Arguments.
 
 The new and improved arguments scanner.
 Attributes:
-* arguments (Tuple[str, ...]):
+* arguments (Sequence[str]):
   The command line arguments to process.
 * errors (List[str]):
   The list of errors collected during argument line parsing.
@@ -104,11 +111,86 @@ Attributes:
   The paths to the Python files to scan.
 * unit_tests: (bool):
   True to true if `--unit-tests` flag is present.
+* tracing: (str):
+  ...
 
 Constructor:
 * Arguments2(arguments)
 
-### <a name="docstrex----run-unit-tests"></a>2.1 `Arguments2.`run_unit_tests():
+### <a name="docstrex----process-arguments"></a>2.1 `Arguments2.`process_arguments():
+
+Arguments2.process_arguments(self, label: str, tracing: str = ''):
+
+Process the arguments for an Arguments2 object.
+
+### <a name="docstrex----match-markdown-flag"></a>2.2 `Arguments2.`match_markdown_flag():
+
+Arguments2.match_markdown_flag(self, argument: str, tracing: str = '') -> bool:
+
+Match the `markdown=...` flag.
+Args:
+* argument (str): The argument to match against.
+
+Returns:
+    True if a match is found and False otherwise.
+
+### <a name="docstrex----match-output-flag"></a>2.3 `Arguments2.`match_output_flag():
+
+Arguments2.match_output_flag(self, argument: str, tracing: str = '') -> bool:
+
+Match a 'output=...' flag.
+Args:
+    argument (str): The argument to match against.
+
+Returns:
+    True if a match is found and False otherwise.
+
+### <a name="docstrex----match-unit-tests-flag"></a>2.4 `Arguments2.`match_unit_tests_flag():
+
+Arguments2.match_unit_tests_flag(self, argument, tracing: str = '') -> bool:
+
+Match --unit-tests flag.
+Args:
+    argument (str): The argument to match against.
+
+Returns:
+    True if a match is found and False otherwise.
+
+### <a name="docstrex----match-file-or-directory"></a>2.5 `Arguments2.`match_file_or_directory():
+
+Arguments2.match_file_or_directory(self, argument: str, tracing: str = '') -> bool:
+
+Process an argument if it is file or directory.
+Arguments:
+    file_name (str): The file name to check for writable.
+
+Returns:
+    True if writable and False otherwise.
+
+### <a name="docstrex----scan-directory"></a>2.6 `Arguments2.`scan_directory():
+
+Arguments2.scan_directory(self, directory: pathlib.Path, errors: List[str], tracing: str = '') -> bool:
+
+Scan a directory for Python files.
+Args:
+* directory (Path): The directory of Pythongfiles to process.
+* errors (List[str]): An error list to append errors to.
+
+Returns:
+* (bool): True for sucess and False otherwise:
+
+### <a name="docstrex----check-file-writable"></a>2.7 `Arguments2.`check_file_writable():
+
+Arguments2.check_file_writable(file_name: str) -> bool:
+
+Check if a file is writable.
+Arguments:
+    file_name (str): The file name to check for writable.
+
+Returns:
+    True if writable and False otherwise.
+
+### <a name="docstrex----run-unit-tests"></a>2.8 `Arguments2.`run_unit_tests():
 
 Arguments2.run_unit_tests(self, tracing: str = '') -> None:
 

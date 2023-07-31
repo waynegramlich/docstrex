@@ -6,7 +6,7 @@ reads the associated documentation strings and generates a single Markdown file.
 
 The simple command line usage is:
      ```
-     docstrex [--outfile=OUT_FILE] [--markdown=MARKDOWN_PROG] [--unit_tests] [PY_FILE_OR_DIR...]
+     docstrex.py [--outfile=OUT_FILE] [--markdown=MARKDOWN_PROG] [--unit_tests] [PY_FILE_OR_DIR...]
      ```
 If `--outfile=FILE` is not specified, `README.md` is generated in the current working directory.
 If `--markdown=MARKDOWN_PROG` is specified, MARKDOWN_PROG is used to convert OUTFILE to an
@@ -33,7 +33,7 @@ import shutil  # Used for shutil.which()
 import subprocess
 import sys
 import tempfile  # Used for unit tests.
-from typing import Any, Callable, cast, Dict, IO, List, Tuple, Optional
+from typing import Any, Callable, cast, Dict, IO, List, Optional, Sequence, Tuple
 
 
 # PyBase:
@@ -685,7 +685,7 @@ class Arguments:
         self.sorted_python_files = tuple(python_files_table[py_path] for py_path in sorted_py_paths)
 
     # Arguments.scan_directory():
-    def scan_directory(self, directory_path: Path, docs_directory: Path) -> None:
+    def scan_directory(self, directory_path: Path, docs_directory: Path, tracing: str = "") -> None:
         """Scan directory for Python files.
 
         Arguments:
@@ -790,9 +790,11 @@ def main(tracing: str = "") -> int:
     if arguments.unit_test:
         arguments.unit_tests(tracing=next_tracing)
 
+    # Temporary:
     arguments2: Arguments2 = Arguments2(command_line_arguments)
-    if arguments.unit_test:
-        arguments2.run_unit_tests(tracing=next_tracing)
+    print(100 * "<")
+    arguments2.run_unit_tests(tracing=next_tracing)
+    print(100 * ">")
 
     sorted_python_files: Tuple[PyFile, ...] = arguments.sorted_python_files
     sorted_python_paths: Tuple[Path, ...] = tuple(
@@ -817,7 +819,7 @@ class Arguments2:
     """Arguments2: The new and improved arguments scanner.
 
     Attributes:
-    * arguments (Tuple[str, ...]):
+    * arguments (Sequence[str]):
       The command line arguments to process.
     * errors (List[str]):
       The list of errors collected during argument line parsing.
@@ -831,12 +833,14 @@ class Arguments2:
       The paths to the Python files to scan.
     * unit_tests: (bool):
       True to true if `--unit-tests` flag is present.
+    * tracing: (str):
+      ...
 
     Constructor:
     * Arguments2(arguments)
     """
 
-    arguments: Tuple[str, ...]
+    arguments: Sequence[str]
     errors: List[str] = field(init=False)
     markdown_path: Optional[Path] = field(init=False)
     output_path: Path = field(init=False)
@@ -847,59 +851,90 @@ class Arguments2:
     # Arguments2.__post_init__():
     def __post_init__(self) -> None:
         """Perform Arguments2 post initialization."""
-        # Ensure that all attributes are initializes:
+        # Ensure that all attributes are initialized:
+        self.arguments = tuple(self.arguments)  # Make sure no accidental changes occur
         self.errors = []
         self.markdown_path = None
         which_markdown: Optional[str] = shutil.which("markdown")
         if which_markdown:
             self.markdown_path = Path(which_markdown)
         readme: Path = Path("README.md")
-        if Arguments2._check_file_writable(str(readme)):
+        if Arguments2.check_file_writable(str(readme)):
             self.output_path = readme
         self.python_paths = []
         self.package_paths = []
         self.unit_tests = False
 
+        # Process the argments in a separate method that is easier to debub.
+        self.process_arguments("__post_init")
+
+    # Arguments2.process_arguments():
+    def process_arguments(self, label: str, tracing: str = ""):
+        """Process the arguments for an Arguments2 object."""
+        next_tracing: str = tracing + " " if tracing else ""
+        if tracing:
+            print("")
+            print(f"{tracing}=>Arguments2.process_arguments('{label}')")
+
         # Execute each process method in turn until one succeeds:
         errors: List[str] = self.errors
         argument: str
-        for argument in self.arguments:
+        index: int
+        for index, argument in enumerate(self.arguments):
             # Attempt to process each different argument flag and stop after first one succeeds.
-            if self._match_markdown_flag(argument):
-                continue
-            if self._match_output_flag(argument):
-                continue
-            if self._match_unit_tests_flag(argument):
-                continue
-            if self._match_file_or_directory(argument):
-                continue
-            errors.append(f"Unable to process argument '{argument}'")
+            if tracing:
+                print(f"{tracing}Argument[{index}]: {argument}")
+            if self.match_markdown_flag(argument, tracing=next_tracing):
+                pass
+            elif self.match_output_flag(argument, tracing=next_tracing):
+                pass
+            elif self.match_unit_tests_flag(argument, tracing=next_tracing):
+                pass
+            elif self.match_file_or_directory(argument, tracing=next_tracing):
+                pass
+            else:
+                file_or_dir: Path = Path(argument)
+                if not file_or_dir.exists():
+                    errors.append(f"{file_or_dir} is neither a file nor directory")
+                elif file_or_dir.is_dir():
+                    self.scan_directory(file_or_dir, errors)
+                else:
+                    errors.append(f"Unable to process argument '{argument}'")
+        if not self.python_paths:
+            self.scan_directory(Path("."), errors)
 
-    # Arguments2._match_markdown_flag():
-    def _match_markdown_flag(self, argument: str) -> bool:
+        if tracing:
+            print(f"{tracing}<=Arguments2.process_arguments('{label}')")
+
+    # Arguments2.match_markdown_flag():
+    def match_markdown_flag(self, argument: str, tracing: str = "") -> bool:
         """Match the `markdown=...` flag.
 
         Args:
-            argument (str): The argument to match against.
+        * argument (str): The argument to match against.
 
         Returns:
             True if a match is found and False otherwise.
 
         """
+        print(f"{tracing}=>>Arguments2.match_markdown_flag()")
         MARKDOWN_PREFIX: str = "--markdown="
+        print(f"{tracing}Arguments2._march_markdown_flag: {argument=}")
         match: bool = False
         if argument.startswith(MARKDOWN_PREFIX):
-            full_path: Optional[str] = shutil.which(argument[:len(MARKDOWN_PREFIX)])
-            if full_path:
-                assert isinstance(full_path, str)
-                self.markdown = Path(full_path)
+            markdown_text: str = argument[len(MARKDOWN_PREFIX):]
+            markdown_file: Optional[str] = shutil.which(markdown_text)
+            if markdown_file:
+                self.markdown_path = Path(markdown_file)
+                # assert False, f"{argument=} {markdown_text=} {markdown_path=} {self.markdown=}"
                 match = True
             else:
-                self.errors += f"'{argument}' markdown executable not found"
+                self.errors.append(f"'{argument}': {markdown_text} executable not found")
+        print(f"{tracing}<=Arguments2.match_markdown_flag()=>{match}")
         return match
 
-    # Arguments2._match_output_flag():
-    def _match_output_flag(self, argument: str) -> bool:
+    # Arguments2.match_output_flag():
+    def match_output_flag(self, argument: str, tracing: str = "") -> bool:
         """Match a 'output=...' flag.
 
         Args:
@@ -909,19 +944,23 @@ class Arguments2:
             True if a match is found and False otherwise.
 
         """
-        OUTPUT_PREFIX: str = "--output="
-        found: bool = False
+        if tracing:
+            print(f"{tracing}=>Arguments2.match_output_flag()")
+        OUTPUT_PREFIX: str = "--outfile="
+        match: bool = False
         if argument.startswith(OUTPUT_PREFIX):
-            output_path: Path = Path(argument[:len(OUTPUT_PREFIX)])
-            if self._check_file_writable(str(output_path)):
+            output_path: Path = Path(argument[len(OUTPUT_PREFIX):])
+            if self.check_file_writable(str(output_path)):
                 self.output_path = output_path
-                found = True
+                match = True
             else:
-                self.errors += f"Unable to write to {output_path}"
-        return found
+                self.errors.append(f"Unable to write to {output_path}")
+        if tracing:
+            print(f"{tracing}<=Arguments2.match_output_flag()=>{match}")
+        return match
 
-    # Arguments2._match_unit_tests():
-    def _match_unit_tests_flag(self, argument) -> bool:
+    # Arguments2.match_unit_tests():
+    def match_unit_tests_flag(self, argument, tracing: str = "") -> bool:
         """Match --unit-tests flag.
 
         Args:
@@ -931,13 +970,17 @@ class Arguments2:
             True if a match is found and False otherwise.
 
         """
+        if tracing:
+            print(f"{tracing}=>Arguments2.match_unit_tests()")
         match: bool = argument == "--unit-tests"
         if match:
             self.unit_tests = True
+        if tracing:
+            print(f"{tracing}<=Arguments2.match_unit_tests()=>{match}")
         return match
 
-    # Arguments2._match_file_or_directory():
-    def _match_file_or_directory(self, argument: str) -> bool:
+    # Arguments2.match_file_or_directory():
+    def match_file_or_directory(self, argument: str, tracing: str = "") -> bool:
         """Process an argument if it is file or directory.
 
         Arguments:
@@ -946,6 +989,10 @@ class Arguments2:
         Returns:
             True if writable and False otherwise.
         """
+        # next_tracing: str = tracing + " " if tracing else ""
+        if tracing:
+            print(f"{tracing}=>Arguments2._match_file_or_directory('{argument}')")
+
         path: Path = Path(argument)
         match: bool = False
         if path.exists():
@@ -953,18 +1000,50 @@ class Arguments2:
                 self.python_paths.append(Path(path))
                 match = True
             elif path.is_dir():
-                init_py: Path = path / "__init__.py"
-                if init_py.is_file():
-                    self.package_paths.append(path)
-                    match = True
-        if not match:
-            self.errors += f"'{argument}' is neither Python file or Python package."
+                match = self.scan_directory(path, self.errors)
 
+        if not match:
+            self.errors.append(
+                f"'{argument}' is neither Python file, package, nor directory.")
+
+        if tracing:
+            print(f"{tracing}<=Arguments2._match_file_or_directory('{argument}') => "
+                  f"{match} {self.errors}")
         return match
 
-    # Arguments2._check_file_writable():
+    # Arguments2.scan_directory():
+    def scan_directory(self, directory: Path, errors: List[str], tracing: str = "") -> bool:
+        """Scan a directory for Python files.
+
+        Args:
+        * directory (Path): The directory of Pythongfiles to process.
+        * errors (List[str]): An error list to append errors to.
+
+        Returns:
+        * (bool): True for sucess and False otherwise:
+
+        """
+        if tracing:
+            print(f"{tracing}=>Arguments2.scan_directory()")
+        assert directory.is_dir(), f"{directory} is not a directory"
+        match: bool = False
+
+        file_path: Path
+        for file_path in directory.glob("*.py"):
+            if file_path.suffix == ".py":
+                self.python_paths.append(file_path)
+                match = True
+            if file_path.name == "__init__.py":
+                self.package_paths.append(directory)
+        if not match:
+            self.errors.append(f"{directory} does not contain any Python files")
+        if tracing:
+            print(f"{tracing}=>Arguments2.scan_directory()=>{match}")
+        return match
+
+    # Arguments2.check_file_writable():
     @staticmethod
-    def _check_file_writable(file_name: str) -> bool:
+    def check_file_writable(file_name: str) -> bool:
         """Check if a file is writable.
 
         Arguments:
@@ -986,14 +1065,101 @@ class Arguments2:
         # target does not exist, check perms on parent dir
         pdir = os.path.dirname(file_name)
         if not pdir:
-            pdir = '.'
+            pdir = '.'  # pragma: no unit cover
         # target is creatable if parent dir is writable
         return os.access(pdir, os.W_OK)
 
     # Arguments2.run_unit_tests():
     def run_unit_tests(self, tracing: str = "") -> None:
         """Run Arguments2 unit tests."""
-        pass
+        next_tracing: str = tracing + " " if tracing else ""
+        if tracing:
+            print(f"{tracing}=>Arguments2.run_unit_tests()")
+            print(f"{tracing}{self.arguments=}")
+
+        # Checkout check_file_writable() method:
+        assert Arguments2.check_file_writable("README.md"), "Writable README.md failed."
+        assert not Arguments2.check_file_writable("/"), "Root should not be writable"
+        assert not Arguments2.check_file_writable("/tmp"), "Overwrite of dir should not be allowed"
+        assert not Arguments2.check_file_writable("/nodir"), "Write into root not allowed"
+        assert Arguments2.check_file_writable("/tmp/foo.bar"), "Write into /tmp allowed"
+
+        def check_error(arguments: Sequence[str], want_error: str, tracing: str = "") -> None:
+            """Verify that an error message is generated."""
+            print(f"{tracing}=>Arguments2.check_error({arguments}, '{want_error}')")
+            arguments2: Arguments2 = Arguments2(arguments)
+            if tracing:
+                print(f"{tracing}{self.errors=}")
+            assert len(arguments2.errors) >= 1, (
+                f"{arguments} did not generate an error '{want_error}'")
+            got_error: str = arguments2.errors[0]
+            assert got_error == want_error, f"Error mismatch \n{want_error=}\n {got_error=}"
+            print(f"{tracing}<=Arguments2.check_error({arguments}, '{want_error}')")
+
+        # foo.py does not exist:
+        check_error(["foo.py"],
+                    "'foo.py' is neither Python file, package, nor directory.",
+                    tracing=next_tracing)
+        # test/package2 exists but does not have a `__init__.py` in it:
+        check_error(["test/package2"],
+                    "test/package2 does not contain any Python files", tracing=next_tracing)
+
+        # `test/package1` does have an `__init__.py` files, so this should work:
+        args2: Arguments2 = Arguments2(["test/package1"])
+        args2.process_arguments('test/package1', tracing=next_tracing)
+        path0: Path = args2.package_paths[0]
+        assert f"{str(path0)}" == "test/package1", "somehow test/package1 is not OK "
+
+        # Test that "--markdown=" works:
+        args2 = Arguments2(["--markdown=cmark"])  # This assumes `cmark` is isntalled.
+        args2.process_arguments("--markdown=cmark", tracing=next_tracing)
+        assert isinstance(args2.markdown_path, Path)
+        assert f"{args2.markdown_path.name}" == "cmark", (
+            f"{args2.markdown_path.name} does not match 'cmark'")
+        check_error(["--markdown=LICENSE"],
+                    "'--markdown=LICENSE': LICENSE executable not found", tracing=next_tracing)
+
+        # Test that "--outfile=" works:
+        args2 = Arguments2(["--outfile=/tmp/README.md"])
+        args2.process_arguments("-outile=/tmp/README.md", tracing=next_tracing)
+        tmp_readme_md: Path = Path("/tmp/README.md")
+        assert f"{args2.output_path}" == f"{tmp_readme_md}", (
+            f"'{args2.output_path}' != '{tmp_readme_md}'")
+        check_error(["--outfile=/bogus.md"], "Unable to write to /bogus.md", tracing=next_tracing)
+
+        # Test that "--unit-tests" works:
+        args2 = Arguments2(["--unit-tests"])
+        args2.process_arguments("--unit-tests", tracing=next_tracing)
+        assert args2.unit_tests, "--unit-tests did not work"
+
+        # Test that explicitly specifying .py file works:
+        args2 = Arguments2(["docstrex.py"])
+        args2.process_arguments("docstrex.py", tracing=next_tracing)
+        assert not args2.errors, "Unexpexted errors found"
+        assert args2.python_paths
+        python_path0: Path = args2.python_paths[0]
+        assert python_path0.name == "docstrex.py", f"Found {python_path0} instead of docstrex.py"
+
+        # Test that no arguments works:
+        args2 = Arguments2([])
+        args2.process_arguments("empty", tracing=next_tracing)
+        markdown_path: Optional[Path] = args2.markdown_path
+        assert isinstance(markdown_path, Path)
+        assert f"{markdown_path.name}" == "markdown", args2
+        output_path: Path = args2.output_path
+        assert f"{output_path}" == "README.md", args2
+        assert not args2.unit_tests, args2
+        assert len(args2.errors) == 0, args2
+        assert len(args2.arguments) == 0, args2.arguments
+        assert len(args2.python_paths) == 2, args2  # __init__.py and docstrx.py
+
+        # Test that bogus file gets flagged as an error:
+        check_error(["test/error.txt"],
+                    "'test/error.txt' is neither Python file, package, nor directory.",
+                    tracing=next_tracing)
+
+        if tracing:
+            print(f"{tracing}<=Arguments2.run_unit_tests()")
 
 
 """
