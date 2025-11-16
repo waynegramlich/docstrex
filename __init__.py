@@ -1,7 +1,7 @@
 """docstrex: python DOCument STRing EXtract to markdown format.
 
-<!---------------------------------------- 100 characters ----------------------------------------->
-
+<!------------------------------ 80 characters ------------------------------->
+x
 ## Table of Contents:
 
 * [Introduction](#introduction)

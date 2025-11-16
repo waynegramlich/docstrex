@@ -11,7 +11,7 @@ clean:
 lint:
 	mypy $(PROGRAM)
 	pydocstyle $(PROGRAM)
-	flake8 --max-line-length=100 $(PROGRAM)
+	flake8 --max-line-length=80 $(PROGRAM)
 
 test:
 	echo "Running unit tests"
