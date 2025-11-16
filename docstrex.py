@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DOCument STRing EXtract -- Convert Python doc strings to markdown.
+"""DOCument STRing EXtract -- Convert Python documentation strings to markdown.
 
 The docstrex program takes a list of individual Python Files and/or directories
 containing Python files, reads their associated documentation strings and
@@ -55,6 +55,8 @@ class PyBase(object):
     """PyBase: Base class of PyFunction, PyClass, PyModule, and PyPackage.
 
     Attributes:
+    * *tracing* (str):
+       If non-empty, code tracing occurs. (For debugging only.)
     * *name* (str):
        The element name (i.e. function/class/module name.)
     * *lines* (Tuple[str, ...]):
@@ -68,10 +70,11 @@ class PyBase(object):
        The Table of contents number as a string.  '#" for classes and
        "#.#" for functions.
 
-    Constructor: PyBase()
+    Constructor: Only sub-classes should use this.
 
     """
 
+    tracing: str
     name: str = field(init=False, default="")
     lines: Tuple[str, ...] = field(init=False, repr=False, default=())
     anchor: str = field(init=False, repr=False, default="")
@@ -92,6 +95,9 @@ class PyBase(object):
         padding removed before being stored into PyBase.Lines attributes.
 
         """
+        tracing: str = self.tracing
+        if tracing:
+            print(f"{tracing}=>PyBase.set_lines()")
         self.lines = ("NO DOC STRING!",)
         if doc_string:
             line: str
@@ -131,6 +137,8 @@ class PyBase(object):
                 del lines[1]
 
             self.lines = tuple(lines)
+        if tracing:
+            print(f"{tracing}<=PyBase.set_lines()")
 
     # PyBase.set_annotations():
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
@@ -157,6 +165,7 @@ class PyFunction(PyBase):
     """PyFunction: Represents a function or method.
 
     Inherited Attributes:
+    * *tracing* (str)
     * *name* (str)
     * *lines* (Tuple[str, ...])
     * *anchor* (str)
@@ -166,7 +175,7 @@ class PyFunction(PyBase):
     *  *function* (Callable): The actual function/method object.
 
     Constructor:
-    * PyFunction(name, lines, anchor, number, function)
+    * PyFunction(tracing, name, lines, anchor, number, function)
 
     """
 
@@ -175,11 +184,22 @@ class PyFunction(PyBase):
     # PyFunction.__post_init__():
     def __post_init__(self) -> None:
         """Post process a PyFunction."""
+        tracing: str = self.tracing
+        if tracing:
+            print(f"{tracing}=>Pyfunction.__post_init__()")
+
         function: Callable = self.function
+        name: str
         if hasattr(function, "__name__"):
-            self.name = getattr(function, "__name__")
-        if hasattr(function, "__doc__"):
+            name = getattr(function, "__name__")
+            self.name = name
+            if tracing:
+                print(f"{tracing}{name=}")
+
             self.set_lines(getattr(function, "__doc__"))
+
+        if tracing:
+            print(f"{tracing}<=Pyfunction.__post_init__()")
 
     # PyFunction.set_annotations():
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
@@ -220,6 +240,10 @@ class PyFunction(PyBase):
         * (Tuple[str, ...]): The resulting documentations lines
 
         """
+        tracing: str = self.tracing
+        if tracing:
+            print(f"{tracing}=>PyFunction.documentation_lines()")
+
         lines: Tuple[str, ...] = self.lines
         signature: inspect.Signature = inspect.Signature.from_callable(
             self.function)
@@ -230,6 +254,8 @@ class PyFunction(PyBase):
             f"{class_name}.{self.name}{signature}:",
             ""
         ) + lines + ("",)
+        if tracing:
+            print(f"{tracing}<=PyFunction.documentation_lines()")
         return doc_lines
 
 
@@ -239,6 +265,7 @@ class PyClass(PyBase):
     """PyClass: Represents a class method.
 
     Inherited Attributes:
+    * *tracing (str): Used for trace debugging.
     * *name* (str): The attribute name.
     * *lines* (Tuple[str, ...]):
     * *anchor* (str):
@@ -250,7 +277,7 @@ class PyClass(PyBase):
        with the Class.
 
     Constructor:
-    * PyClass()
+    * PyClass(tracing)
 
     """
 
@@ -260,6 +287,10 @@ class PyClass(PyBase):
     # PyClass.__post_init__():
     def __post_init__(self) -> None:
         """Post process PyClass."""
+        tracing: str = self.tracing
+        if tracing:
+            print(f"{tracing}=>PyClass.__post_init__()")
+
         # Set Name and Lines attributes:
         if hasattr(self.xclass, "__name__"):
             self.name = cast(str, getattr(self.xclass, "__name__"))
@@ -272,8 +303,11 @@ class PyClass(PyBase):
         attribute: Any
         for attribute_name, attribute in self.xclass.__dict__.items():
             if not attribute_name.startswith("_") and callable(attribute):
-                py_functions.append(PyFunction(attribute))
+                py_functions.append(PyFunction(tracing, attribute))
         self.Functions = tuple(py_functions)
+
+        if tracing:
+            print(f"{tracing}<=PyClass.__post_init__()")
 
     # PyClass.set_annotations():
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
@@ -329,6 +363,7 @@ class PyModule(PyBase):
     module/class/function names have underscores converted into hyphens.
 
     Inherited Attributes:
+    * *tracing* (str):
     * *name* (str):
     * *lines* (Tuple[str, ...]):
     * *anchor* (str):
@@ -340,7 +375,7 @@ class PyModule(PyBase):
     #   The classes defined by the Python module object.
 
     Constructor:
-    * PyModule(name, lines, anchor, number, module, classes)
+    * PyModule(tracing, module, classes)
     """
 
     module: Any = field(repr=False)
@@ -349,6 +384,10 @@ class PyModule(PyBase):
     # PyModule.__post_init__():
     def __post_init__(self) -> None:
         """Recursively extract information from an object."""
+        tracing: str = self.tracing
+        if tracing:
+            print(f"{tracing}=>PyModule.__post_init__()")
+
         module: Any = self.module
 
         # Get initial *module_name*:
@@ -357,18 +396,21 @@ class PyModule(PyBase):
             module_name = getattr(module, "__name__")
         is_package: bool = module_name == "__init__"
 
+        if tracing:
+            print(f"{tracing}here 1")
+
         # Change first string to enable package tracing.
-        tracing: str = "." if is_package else ""
         if tracing:
             print(f"{tracing}Processing {module_name} {is_package=}")
         if hasattr(module, "__doc__"):
             doc_string = getattr(module, "__doc__")
             if tracing:
-                print(f"{tracing}{doc_string=}")
+                print(f"{tracing}{doc_string[:50]=}...")
             self.set_lines(doc_string)
+            if tracing:
+                print(f"{tracing}here 1a")
             if is_package:
                 first_line: str = self.lines[0]
-                exit(1)
                 colon_index: int = first_line.find(":")
                 if colon_index >= 0:
                     module_name = first_line[:colon_index]
@@ -376,6 +418,8 @@ class PyModule(PyBase):
                         colon_index + 2:]  # Skip over "...: "
                     self.Lines = (first_line, "") + self.lines[1:]
 
+        if tracing:
+            print(f"{tracing}here 2")
         # The Python import statement can import class to the module namespace.
         # We are only interested in classes that are defined in *module*:
         py_classes: List[PyClass] = []
@@ -392,10 +436,16 @@ class PyModule(PyBase):
                     #       f"{attribute=} {defining_module}")
                     if isinstance(attribute, class_type) \
                        and str(defining_module) == module_name:
-                        py_classes.append(PyClass(attribute))
+                        py_classes.append(PyClass(tracing, attribute))
                         # print(f">>>>>>>>>>Defined class: {attribute_name}")
+        if tracing:
+            print(f"{tracing}here 3")
+
         self.Name = module_name
         self.Classes = tuple(py_classes)
+
+        if tracing:
+            print(f"{tracing}<=PyModule.__post_init__()")
 
     # PyModule.set_annotations():
     def set_annotations(self, anchor_prefix: str, number_prefix: str) -> None:
@@ -527,10 +577,11 @@ class PyFile:
       True if `def main(` is present in file.  (Default is False.)
 
     Constructor:
-    * PyFile(python_path, markdown_path, convert_path, html_path)
+    * PyFile(tracing, python_path, markdown_path, convert_path, html_path)
 
     """
 
+    tracing: str
     python_path: Path
     convert_path: Optional[Path]
     markdown_path: Path
@@ -541,6 +592,10 @@ class PyFile:
     # PyFile.__post_init__():
     def __post__init__(self) -> None:
         """Finish initializing a PyFile."""
+        tracing: str = self.tracing
+        if tracing:
+            print(f"{tracing}=>__post_init__()")
+
         self.detects_main = False
         self.has_main = False
         file: IO[str]
@@ -554,6 +609,8 @@ class PyFile:
             elif (line.startswith("if __name__ == ")
                   and line[-1] == ":" and line[-6:-1] == "__main__"):
                 self.detects_main = True
+        if tracing:
+            print(f"{tracing}<=__post_init__()")
 
     # PyFile.process():
     def process(self, modules: "List[PyModule]", markdown_path: Path,
@@ -569,8 +626,8 @@ class PyFile:
         * html_path (Path): The path for the `README.html` file.
         * errors (List[str]): A list to collect any generated errors on.
 
-        Process the PyFile (*self*) and append the generated PyModule to
-        *modulxes*.  Any error message lines are append to *error*s.
+        Process the PyFile (*self*) and append the generated PyModule's to
+        *modules*.  Any error message lines are appended to *error*s.
 
         """
         next_tracing = tracing + " " if tracing else ""
@@ -580,7 +637,12 @@ class PyFile:
 
         python_path: Path = self.python_path
         module_name: str = python_path.stem
-        module: Any = None  # TODO: figure out what the real type is.
+        if tracing:
+            print(f"{tracing}{python_path=}")
+            print(f"{tracing}{module_name=}")
+
+        # Use Any, since in Python the module type is lower case "module".
+        module: Any = None
         try:
             module = importlib.import_module(f"{module_name}")
         except ModuleNotFoundError as no_module_error:  # pragma: no unit cover
@@ -595,14 +657,23 @@ class PyFile:
             errors.append(
                 f"Unable to open module {module_name}: Not clear why")
 
-        py_module: PyModule = PyModule(module)
+        # Generate the new PyModule and collect them.
+        if tracing:
+            print(f"{tracing}here 1: before PyModule")
+        py_module: PyModule = PyModule(tracing, module)
+        if tracing:
+            print(f"{tracing}here 2: after PyModule")
         py_module.set_annotations("", "")
         try:
             py_module.generate(markdown_path,
                                convert_path, html_path, tracing=next_tracing)
         except RuntimeError as runtime_error:  # pragma: no unit cover
             errors.append(f"{markdown_path}: runtime error {runtime_error}")
+        if tracing:
+            print(f"{tracing}here 3")
         modules.append(py_module)
+        if tracing:
+            print(f"{tracing}here 4")
 
         if tracing:
             print(f"{tracing}<=PyFile.process("
@@ -615,8 +686,11 @@ class PyPackage(PyBase):
     """PyPackage: Represents a Python package `__init.py__` file.
 
     Inherited Attributes:
-    * *Name* (str): The pkg name (i.e name of dir with the `__init__.py` file.)
-    * *Lines* (Tuple[str, ...) , *Anchor*, *Number* from PyBase.
+    * *tracing* (str)
+    * *name* (str)
+    * *lines* (Tuple[str, ...])
+    * *anchor* (str)
+    * *number* (str)
 
     Attributes:
     * *Class* (Any): The underlying Python class object that is imported.
@@ -639,7 +713,7 @@ def main(tracing: str = "") -> int:
         print(f"{tracing}=>main()")
 
     command_line_arguments: Tuple[str, ...] = tuple(sys.argv[1:])
-    arguments: Arguments = Arguments(command_line_arguments)
+    arguments: Arguments = Arguments(tracing, command_line_arguments)
     if tracing:
         print(f"{tracing}{arguments.arguments=}")
         print(f"{tracing}{arguments.directories=}")
@@ -661,6 +735,7 @@ class Arguments:
     """Arguments: Command line arguments scanner.
 
     Attributes:
+    * tracing (set): Set to " " to enable tracing and "" to disable.
     * arguments (Sequence[str]):
       The command line arguments to process.
     * convert_path: (Optional[Path]):
@@ -678,9 +753,10 @@ class Arguments:
       ...
 
     Constructor:
-    * Arguments(command_line_arguments)
+    * Arguments(tracing, command_line_arguments)
     """
 
+    tracing: str
     arguments: Sequence[str]
     convert_path: Optional[Path] = field(init=False)
     directories: Dict[Path, Set[Path]] = field(init=False)
@@ -688,12 +764,11 @@ class Arguments:
     html: bool = field(init=False)
     markdown: Optional[Path] = field(init=False)
     unit_tests: bool = field(init=False)
-    tracing: str = " "
 
     # Arguments.__post_init__():
     def __post_init__(self) -> None:
         """Perform Arguments post initialization."""
-        tracing: str = " "
+        tracing: str = self.tracing
         next_tracing: str = tracing + " " if tracing else ""
         if tracing:
             print(f"{tracing}=>Arguments.__post_init__()")
@@ -754,9 +829,10 @@ class Arguments:
                 file_or_dir: Path = Path(argument)
                 if not file_or_dir.exists():
                     errors.append(
-                        f"{file_or_dir} is neither a file no`r directory")
+                        f"{file_or_dir} is neither a file nor directory")
                 elif file_or_dir.is_dir():
-                    self.scan_directory(file_or_dir, tracing=next_tracing)
+                    # self.scan_directory(file_or_dir, tracing=next_tracing)
+                    self.scan_directory(file_or_dir, tracing=" ")
                 else:
                     errors.append(f"Unable to process argument '{argument}'")
         if not self.directories:
@@ -863,7 +939,8 @@ class Arguments:
         return match
 
     # Arguments.match_file_or_directory():
-    def match_file_or_directory(self, argument: str, tracing: str = "") -> bool:
+    def match_file_or_directory(self,
+                                argument: str, tracing: str = "") -> bool:
         """Process an argument if it is file or directory.
 
         Arguments:
@@ -926,10 +1003,14 @@ class Arguments:
             print(f"{tracing}=>scan_directory({directory})")
 
         assert directory.is_dir(), f"{directory} is not a directory."
+        match: bool = False
         python_path: Path
         for python_path in directory.glob("*.py"):
+            if tracing:
+                print(f"{tracing}{python_path=}")
             self.python_record(python_path)
             match = True
+            break
         else:
             self.errors.append(f"No Python (`.py`) files found in {directory}")
 
@@ -990,7 +1071,7 @@ class Arguments:
                         error: str, tracing: str = "") -> None:
             """Verify that an error message is generated."""
             print(f"{tracing}=>Arguments.check_error({arguments}, '{error}')")
-            arguments2: Arguments = Arguments(arguments)
+            arguments2: Arguments = Arguments("", arguments)
             if tracing:
                 print(f"{tracing}{self.errors=}")
             assert len(arguments2.errors) >= 1, (
@@ -1011,13 +1092,14 @@ class Arguments:
 
         # `test/package1` does have an `__init__.py` files,
         # so this should work:
-        args: Arguments = Arguments(["test/package1"])
+        args: Arguments = Arguments("", ["test/package1"])
         # args.process_further("test/package1", tracing=next_tracing)
         path0: Path = Path("test/package1")
         assert path0 in self.directories, "somehow test/package1 is not OK "
 
         # Test that "--covert=" works:
-        args = Arguments(["--convert=cmark"])  # Assumes `cmark` is installed.
+        args = Arguments("",
+                         ["--convert=cmark"])  # Assumes `cmark` is installed.
         args.process_further("--convert=cmark", tracing=next_tracing)
         assert isinstance(args.convert_path, Path)
         assert f"{args.convert_path.name}" == "cmark", (
@@ -1027,7 +1109,7 @@ class Arguments:
                     tracing=next_tracing)
 
         # Test that "--outfile=" works:
-        args = Arguments(["--outfile=/tmp/README.md"])
+        args = Arguments("", ["--outfile=/tmp/README.md"])
         args.process_further("-outfile=/tmp/README.md", tracing=next_tracing)
         tmp_readme_md: Path = Path("/tmp/README.md")
         assert f"{args.output_path}" == f"{tmp_readme_md}", (
@@ -1036,12 +1118,12 @@ class Arguments:
                     "Unable to write to /bogus.md", tracing=next_tracing)
 
         # Test that "--unit-tests" works:
-        args = Arguments(["--unit-tests"])
+        args = Arguments("", ["--unit-tests"])
         args.process_further("--unit-tests", tracing=next_tracing)
         assert args.unit_tests, "--unit-tests did not work"
 
         # Test that explicitly specifying .py file works:
-        args = Arguments(["docstrex.py"])
+        args = Arguments("", ["docstrex.py"])
         args.process_further("docstrex.py", tracing=next_tracing)
         assert not args.errors, "Unexpexted errors found"
         assert args.directories, "No paths are present"
@@ -1051,7 +1133,7 @@ class Arguments:
             f"Found {python0} instead of `docstrex.py`")
 
         # Test that no arguments works:
-        args = Arguments([])
+        args = Arguments("", [])
         args.process_further("empty", tracing=next_tracing)
         markdown_path: Optional[Path] = args.markdown_path
         assert isinstance(markdown_path, Path)
@@ -1084,7 +1166,8 @@ class Arguments:
     def process(self, tracing: str = "") -> int:
         """Process the command line Arguments."""
         next_tracing: str = tracing + " " if tracing else ""
-        print(f"{tracing}=>Arguments.process()")
+        if tracing:
+            print(f"{tracing}=>Arguments.process()")
 
         convert_path: Optional[Path] = self.convert_path
         directories: Dict[Path, Set[Path]] = self.directories
@@ -1109,17 +1192,20 @@ class Arguments:
             python_path: Path
             index2: int
             for index2, python_path in enumerate(sorted_python_paths):
-                python_file: PyFile = PyFile(python_path, convert_path,
-                                             markdown_path, html_path)
+                python_file: PyFile
+                python_file = PyFile(tracing, python_path,
+                                     convert_path, markdown_path, html_path)
                 if tracing:
-                    print(f"{tracing}PyFile[{index1}, {index2}]: {python_path}")
+                    print(
+                        f"{tracing}PyFile[{index1}, {index2}]: {python_path}")
                 python_file.process(modules, markdown_path, convert_path,
                                     html_path, errors, tracing=next_tracing)
 
         for error in errors:
             print(error)  # pragma: no unit cover
         return_code: int = int(len(errors) != 0)
-        print(f"{tracing}<=Arugments.process()=>{return_code}")
+        if tracing:
+            print(f"{tracing}<=Arugments.process()=>{return_code}")
         return return_code
 
 
@@ -1160,4 +1246,4 @@ class Arguments:
 """
 
 if __name__ == "__main__":
-    main(tracing=" ")
+    main(tracing="")
